@@ -171,20 +171,20 @@ void black_init(void) {
 
   // C0: OBD_SBU1 (orientation detection)
   // C3: OBD_SBU2 (orientation detection)
-  set_gpio_mode(GPIOC, 0, MODE_ANALOG);
-  set_gpio_mode(GPIOC, 3, MODE_ANALOG);
+  // set_gpio_mode(GPIOC, 0, MODE_ANALOG);
+  // set_gpio_mode(GPIOC, 3, MODE_ANALOG);
 
   // Set default state of GPS
   current_board->set_gps_mode(GPS_ENABLED);
 
   // C10: OBD_SBU1_RELAY (harness relay driving output)
   // C11: OBD_SBU2_RELAY (harness relay driving output)
-  set_gpio_mode(GPIOC, 10, MODE_OUTPUT);
-  set_gpio_mode(GPIOC, 11, MODE_OUTPUT);
-  set_gpio_output_type(GPIOC, 10, OUTPUT_TYPE_OPEN_DRAIN);
-  set_gpio_output_type(GPIOC, 11, OUTPUT_TYPE_OPEN_DRAIN);
-  set_gpio_output(GPIOC, 10, 1);
-  set_gpio_output(GPIOC, 11, 1);
+  // set_gpio_mode(GPIOC, 10, MODE_OUTPUT);
+  // set_gpio_mode(GPIOC, 11, MODE_OUTPUT);
+  // set_gpio_output_type(GPIOC, 10, OUTPUT_TYPE_OPEN_DRAIN);
+  // set_gpio_output_type(GPIOC, 11, OUTPUT_TYPE_OPEN_DRAIN);
+  // set_gpio_output(GPIOC, 10, 1);
+  // set_gpio_output(GPIOC, 11, 1);
 
   // Turn on GPS load switch.
   black_set_gps_load_switch(true);
@@ -210,9 +210,9 @@ void black_init(void) {
   black_set_can_mode(CAN_MODE_NORMAL);
 
   // flip CAN0 and CAN2 if we are flipped
-  if (car_harness_status == HARNESS_STATUS_FLIPPED) {
-    can_flip_buses(0, 2);
-  }
+  // if (car_harness_status == HARNESS_STATUS_FLIPPED) {
+  //   can_flip_buses(0, 2);
+  // }
 
   // init multiplexer
   can_set_obd(car_harness_status, false);

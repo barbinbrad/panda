@@ -1,6 +1,6 @@
-// /////////// //
-// White Panda //
-// /////////// //
+// ////////////////////////////////// //
+// Black Panda Without GPS + Harness  //
+// ////////////////////////////////// //
 
 void white_enable_can_transceiver(uint8_t transceiver, bool enabled) {
   switch (transceiver){
@@ -13,6 +13,9 @@ void white_enable_can_transceiver(uint8_t transceiver, bool enabled) {
     case 3U:
       set_gpio_output(GPIOA, 0, !enabled);
       break;
+    case 4U:
+      set_gpio_output(GPIOB, 10, !enabled);
+      break;
     default:
       puts("Invalid CAN transceiver ("); puth(transceiver); puts("): enabling failed\n");
       break;
@@ -20,9 +23,13 @@ void white_enable_can_transceiver(uint8_t transceiver, bool enabled) {
 }
 
 void white_enable_can_transceivers(bool enabled) {
-  uint8_t t1 = enabled ? 1U : 2U;  // leave transceiver 1 enabled to detect CAN ignition
-  for(uint8_t i=t1; i<=3U; i++) {
-    white_enable_can_transceiver(i, enabled);
+  for(uint8_t i=1U; i<=4U; i++){
+    // Leave main CAN always on for CAN-based ignition detection
+    if((car_harness_status == HARNESS_STATUS_FLIPPED) ? (i == 3U) : (i == 1U)){
+      white_enable_can_transceiver(i, true);
+    } else {
+      white_enable_can_transceiver(i, enabled);
+    }
   }
 }
 
@@ -42,31 +49,30 @@ void white_set_led(uint8_t color, bool enabled) {
   }
 }
 
-void white_set_usb_power_mode(uint8_t mode){
-  bool valid_mode = true;
+void white_set_gps_load_switch(bool enabled) {
+  set_gpio_output(GPIOC, 12, enabled);
+}
+
+void white_set_usb_load_switch(bool enabled) {
+  set_gpio_output(GPIOB, 1, !enabled);
+}
+
+void white_set_usb_power_mode(uint8_t mode) {
+  bool valid = false;
   switch (mode) {
     case USB_POWER_CLIENT:
-      // B2,A13: set client mode
-      set_gpio_output(GPIOB, 2, 0);
-      set_gpio_output(GPIOA, 13, 1);
+      white_set_usb_load_switch(false);
+      valid = true;
       break;
     case USB_POWER_CDP:
-      // B2,A13: set CDP mode
-      set_gpio_output(GPIOB, 2, 1);
-      set_gpio_output(GPIOA, 13, 1);
-      break;
-    case USB_POWER_DCP:
-      // B2,A13: set DCP mode on the charger (breaks USB!)
-      set_gpio_output(GPIOB, 2, 0);
-      set_gpio_output(GPIOA, 13, 0);
+      white_set_usb_load_switch(true);
+      valid = true;
       break;
     default:
-      valid_mode = false;
-      puts("Invalid usb power mode\n");
+      puts("Invalid USB power mode\n");
       break;
   }
-
-  if (valid_mode) {
+  if (valid) {
     usb_power_mode = mode;
   }
 }
@@ -74,16 +80,21 @@ void white_set_usb_power_mode(uint8_t mode){
 void white_set_gps_mode(uint8_t mode) {
   switch (mode) {
     case GPS_DISABLED:
-      // ESP OFF
+      // GPS OFF
       set_gpio_output(GPIOC, 14, 0);
       set_gpio_output(GPIOC, 5, 0);
+      break;
+    case GPS_ENABLED:
+      // GPS ON
+      set_gpio_output(GPIOC, 14, 1);
+      set_gpio_output(GPIOC, 5, 1);
       break;
     case GPS_BOOTMODE:
       set_gpio_output(GPIOC, 14, 1);
       set_gpio_output(GPIOC, 5, 0);
       break;
     default:
-      puts("Invalid ESP/GPS mode\n");
+      puts("Invalid GPS mode\n");
       break;
   }
 }
@@ -91,55 +102,24 @@ void white_set_gps_mode(uint8_t mode) {
 void white_set_can_mode(uint8_t mode){
   switch (mode) {
     case CAN_MODE_NORMAL:
-      // B12,B13: disable GMLAN mode
-      set_gpio_mode(GPIOB, 12, MODE_INPUT);
-      set_gpio_mode(GPIOB, 13, MODE_INPUT);
+    case CAN_MODE_OBD_CAN2:
+      if ((bool)(mode == CAN_MODE_NORMAL) != (bool)(car_harness_status == HARNESS_STATUS_FLIPPED)) {
+        // B12,B13: disable OBD mode
+        set_gpio_mode(GPIOB, 12, MODE_INPUT);
+        set_gpio_mode(GPIOB, 13, MODE_INPUT);
 
-      // B3,B4: disable GMLAN mode
-      set_gpio_mode(GPIOB, 3, MODE_INPUT);
-      set_gpio_mode(GPIOB, 4, MODE_INPUT);
+        // B5,B6: normal CAN2 mode
+        set_gpio_alternate(GPIOB, 5, GPIO_AF9_CAN2);
+        set_gpio_alternate(GPIOB, 6, GPIO_AF9_CAN2);
+      } else {
+        // B5,B6: disable normal CAN2 mode
+        set_gpio_mode(GPIOB, 5, MODE_INPUT);
+        set_gpio_mode(GPIOB, 6, MODE_INPUT);
 
-      // B5,B6: normal CAN2 mode
-      set_gpio_alternate(GPIOB, 5, GPIO_AF9_CAN2);
-      set_gpio_alternate(GPIOB, 6, GPIO_AF9_CAN2);
-
-      // A8,A15: normal CAN3 mode
-      set_gpio_alternate(GPIOA, 8, GPIO_AF11_CAN3);
-      set_gpio_alternate(GPIOA, 15, GPIO_AF11_CAN3);
-      break;
-    case CAN_MODE_GMLAN_CAN2:
-      // B5,B6: disable CAN2 mode
-      set_gpio_mode(GPIOB, 5, MODE_INPUT);
-      set_gpio_mode(GPIOB, 6, MODE_INPUT);
-
-      // B3,B4: disable GMLAN mode
-      set_gpio_mode(GPIOB, 3, MODE_INPUT);
-      set_gpio_mode(GPIOB, 4, MODE_INPUT);
-
-      // B12,B13: GMLAN mode
-      set_gpio_alternate(GPIOB, 12, GPIO_AF9_CAN2);
-      set_gpio_alternate(GPIOB, 13, GPIO_AF9_CAN2);
-
-      // A8,A15: normal CAN3 mode
-      set_gpio_alternate(GPIOA, 8, GPIO_AF11_CAN3);
-      set_gpio_alternate(GPIOA, 15, GPIO_AF11_CAN3);
-      break;
-    case CAN_MODE_GMLAN_CAN3:
-      // A8,A15: disable CAN3 mode
-      set_gpio_mode(GPIOA, 8, MODE_INPUT);
-      set_gpio_mode(GPIOA, 15, MODE_INPUT);
-
-      // B12,B13: disable GMLAN mode
-      set_gpio_mode(GPIOB, 12, MODE_INPUT);
-      set_gpio_mode(GPIOB, 13, MODE_INPUT);
-
-      // B3,B4: GMLAN mode
-      set_gpio_alternate(GPIOB, 3, GPIO_AF11_CAN3);
-      set_gpio_alternate(GPIOB, 4, GPIO_AF11_CAN3);
-
-      // B5,B6: normal CAN2 mode
-      set_gpio_alternate(GPIOB, 5, GPIO_AF9_CAN2);
-      set_gpio_alternate(GPIOB, 6, GPIO_AF9_CAN2);
+        // B12,B13: OBD mode
+        set_gpio_alternate(GPIOB, 12, GPIO_AF9_CAN2);
+        set_gpio_alternate(GPIOB, 13, GPIO_AF9_CAN2);
+      }
       break;
     default:
       puts("Tried to set unsupported CAN mode: "); puth(mode); puts("\n");
@@ -147,12 +127,19 @@ void white_set_can_mode(uint8_t mode){
   }
 }
 
-uint32_t white_read_current(void){
-  return adc_get(ADCCHAN_CURRENT);
-}
-
 void white_usb_power_mode_tick(uint32_t uptime){
   UNUSED(uptime);
+  // Not applicable
+}
+
+bool white_check_ignition(void){
+  // ignition is checked through harness
+  return harness_check_ignition();
+}
+
+uint32_t white_read_current(void){
+  // No current sense on black panda
+  return 0U;
 }
 
 void white_set_ir_power(uint8_t percentage){
@@ -161,11 +148,6 @@ void white_set_ir_power(uint8_t percentage){
 
 void white_set_fan_power(uint8_t percentage){
   UNUSED(percentage);
-}
-
-bool white_check_ignition(void){
-  // ignition is on PA1
-  return !get_gpio_input(GPIOA, 1);
 }
 
 void white_set_phone_power(bool enabled){
@@ -180,54 +162,41 @@ void white_set_siren(bool enabled){
   UNUSED(enabled);
 }
 
-void white_grey_common_init(void) {
+void white_init(void) {
   common_init_gpio();
 
-  // C3: current sense
-  set_gpio_mode(GPIOC, 3, MODE_ANALOG);
+  // A8,A15: normal CAN3 mode
+  set_gpio_alternate(GPIOA, 8, GPIO_AF11_CAN3);
+  set_gpio_alternate(GPIOA, 15, GPIO_AF11_CAN3);
 
-  // A1: started_alt
-  set_gpio_pullup(GPIOA, 1, PULL_UP);
+  // C0: OBD_SBU1 (orientation detection)
+  // C3: OBD_SBU2 (orientation detection)
+  // set_gpio_mode(GPIOC, 0, MODE_ANALOG);
+  // set_gpio_mode(GPIOC, 3, MODE_ANALOG);
 
-  // A2, A3: USART 2 for debugging
-  set_gpio_alternate(GPIOA, 2, GPIO_AF7_USART2);
-  set_gpio_alternate(GPIOA, 3, GPIO_AF7_USART2);
+  // Set default state of GPS
+  current_board->set_gps_mode(GPS_DISABLED);
 
-  // A4, A5, A6, A7: SPI
-  set_gpio_alternate(GPIOA, 4, GPIO_AF5_SPI1);
-  set_gpio_alternate(GPIOA, 5, GPIO_AF5_SPI1);
-  set_gpio_alternate(GPIOA, 6, GPIO_AF5_SPI1);
-  set_gpio_alternate(GPIOA, 7, GPIO_AF5_SPI1);
+  // C10: OBD_SBU1_RELAY (harness relay driving output)
+  // C11: OBD_SBU2_RELAY (harness relay driving output)
+  // set_gpio_mode(GPIOC, 10, MODE_OUTPUT);
+  // set_gpio_mode(GPIOC, 11, MODE_OUTPUT);
+  // set_gpio_output_type(GPIOC, 10, OUTPUT_TYPE_OPEN_DRAIN);
+  // set_gpio_output_type(GPIOC, 11, OUTPUT_TYPE_OPEN_DRAIN);
+  // set_gpio_output(GPIOC, 10, 1);
+  // set_gpio_output(GPIOC, 11, 1);
 
-  // B12: GMLAN, ignition sense, pull up
-  set_gpio_pullup(GPIOB, 12, PULL_UP);
+  // Turn on GPS load switch.
+  white_set_gps_load_switch(false);
 
-  /* GMLAN mode pins:
-      M0(B15)  M1(B14)  mode
-      =======================
-      0        0        sleep
-      1        0        100kbit
-      0        1        high voltage wakeup
-      1        1        33kbit (normal)
-  */
-  set_gpio_output(GPIOB, 14, 1);
-  set_gpio_output(GPIOB, 15, 1);
+  // Turn on USB load switch.
+  white_set_usb_load_switch(true);
 
-  // B7: K-line enable
-  set_gpio_output(GPIOB, 7, 1);
+  // Set right power mode
+  white_set_usb_power_mode(USB_POWER_CDP);
 
-  // C12, D2: Setup K-line (UART5)
-  set_gpio_alternate(GPIOC, 12, GPIO_AF8_UART5);
-  set_gpio_alternate(GPIOD, 2, GPIO_AF8_UART5);
-  set_gpio_pullup(GPIOD, 2, PULL_UP);
-
-  // L-line enable
-  set_gpio_output(GPIOA, 14, 1);
-
-  // C10, C11: L-Line setup (USART3)
-  set_gpio_alternate(GPIOC, 10, GPIO_AF7_USART3);
-  set_gpio_alternate(GPIOC, 11, GPIO_AF7_USART3);
-  set_gpio_pullup(GPIOC, 11, PULL_UP);
+  // Initialize harness
+  harness_init();
 
   // Enable CAN transceivers
   white_enable_can_transceivers(true);
@@ -240,35 +209,36 @@ void white_grey_common_init(void) {
   // Set normal CAN mode
   white_set_can_mode(CAN_MODE_NORMAL);
 
-  // Init usb power mode
-  uint32_t voltage = adc_get_voltage();
-  // Init in CDP mode only if panda is powered by 12V.
-  // Otherwise a PC would not be able to flash a standalone panda
-  if (voltage > 8000U) {  // 8V threshold
-    white_set_usb_power_mode(USB_POWER_CDP);
-  } else {
-    white_set_usb_power_mode(USB_POWER_CLIENT);
-  }
-}
+  // flip CAN0 and CAN2 if we are flipped
+  // if (car_harness_status == HARNESS_STATUS_FLIPPED) {
+  //   can_flip_buses(0, 2);
+  // }
 
-void white_init(void) {
-  white_grey_common_init();
-
-  // Set ESP off by default
-  current_board->set_gps_mode(GPS_DISABLED);
+  // init multiplexer
+  can_set_obd(car_harness_status, false);
 }
 
 const harness_configuration white_harness_config = {
-  .has_harness = false
+  .has_harness = true,
+  .GPIO_SBU1 = GPIOC,
+  .GPIO_SBU2 = GPIOC,
+  .GPIO_relay_SBU1 = GPIOC,
+  .GPIO_relay_SBU2 = GPIOC,
+  .pin_SBU1 = 0,
+  .pin_SBU2 = 3,
+  .pin_relay_SBU1 = 10,
+  .pin_relay_SBU2 = 11,
+  .adc_channel_SBU1 = 10,
+  .adc_channel_SBU2 = 13
 };
 
-const board board_white = {
+const board board_black = {
   .board_type = "White",
   .harness_config = &white_harness_config,
   .has_gps = false,
-  .has_hw_gmlan = true,
-  .has_obd = false,
-  .has_lin = true,
+  .has_hw_gmlan = false,
+  .has_obd = true,
+  .has_lin = false,
   .has_rtc = false,
   .init = white_init,
   .enable_can_transceiver = white_enable_can_transceiver,
