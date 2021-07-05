@@ -39,9 +39,6 @@ void set_intercept_relay(bool intercept) {
 
 bool harness_check_ignition(void) {
   bool ret = false;
-  set_gpio_mode(GPIOA, 1, MODE_INPUT);
-  delay(100);
-  ret = !get_gpio_input(GPIOA, 1);
   return ret;
 }
 

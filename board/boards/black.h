@@ -133,8 +133,8 @@ void black_usb_power_mode_tick(uint32_t uptime){
 }
 
 bool black_check_ignition(void){
-  // ignition is checked through harness
-  return harness_check_ignition();
+  // Ignition is on pin PA1
+  return !get_gpio_input(GPIOA, 1);
 }
 
 uint32_t black_read_current(void){
@@ -163,6 +163,9 @@ void black_set_siren(bool enabled){
 }
 
 void black_init(void) {
+  // Ignition
+  set_gpio_pullup(GPIOA, 1, PULL_UP);
+
   common_init_gpio();
 
   // A8,A15: normal CAN3 mode
